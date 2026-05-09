@@ -1,0 +1,6 @@
+- path: spec.template.metadata.labels.app
+  operator: ==
+  expected: test-value-override
+- path: spec.template.spec.containers[0].imagePullPolicy
+  operator: ==
+  expected: Always
