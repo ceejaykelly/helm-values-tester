@@ -1,6 +1,6 @@
 app:
   name: test
 image:
-  repository: nginx
+  repository: test-repo
   tag: stable
   pullPolicy: IfNotPresent
