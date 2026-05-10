@@ -233,4 +233,25 @@ check-token-exists:
 
 ---
 
+## Automated Releases & Versioning
+
+This project uses [release-please](https://github.com/googleapis/release-please) for automated semantic versioning and GitHub Releases.
+
+- **Version bumps and changelogs are generated automatically from commit messages.**
+- **Binaries for Linux, macOS, and Windows are published to each GitHub Release.**
+
+### How it works
+- All commits after v0.1.0 must follow [Conventional Commits](https://www.conventionalcommits.org/) (e.g., `fix: ...`, `feat: ...`, `feat!: ...`).
+- When you push to `main`, release-please will open a PR to bump the version and update the changelog.
+- Merging that PR creates a new tag and triggers the build workflow, which publishes binaries to the release.
+
+### Example commit messages
+- `fix: correct assertion logic` → patch bump (0.1.0 → 0.1.1)
+- `feat: add new operator` → minor bump (0.1.0 → 0.2.0)
+- `feat!: breaking change` or `BREAKING CHANGE:` in body → major bump (0.1.0 → 1.0.0)
+
+See the [Releases](https://github.com/ceejaykelly/yaml-assertions/releases) page for downloads.
+
+---
+
 Contributions and issues welcome!
