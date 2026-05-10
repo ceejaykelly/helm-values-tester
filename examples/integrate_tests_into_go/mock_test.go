@@ -37,7 +37,7 @@ func TestMergedValuesAssertions(t *testing.T) {
 	}
 
 	// Define assertions against the merged result.
-	// Operators: == (equal), != (not equal), contains, exists
+	// Operators: == (equal), != (not equal), contains, exists, all
 	assertions := []assertion{
 		// Override takes precedence over base for replicaCount.
 		{path: "replicaCount", operator: "==", expected: 3},
@@ -49,6 +49,11 @@ func TestMergedValuesAssertions(t *testing.T) {
 		{path: "secret.password", operator: "==", expected: "prod-secret"},
 		// app.name is present (existence check).
 		{path: "app.name", operator: "exists", expected: nil},
+
+		// At least one container has runAsNonRoot: true (should pass)
+		{path: "containers", operator: "contains", expected: map[string]any{"securityContext": map[string]any{"runAsNonRoot": true}}},
+		// All containers have runAsNonRoot: true (should fail, only one does)
+		{path: "containers", operator: "all", expected: map[string]any{"securityContext": map[string]any{"runAsNonRoot": true}}},
 	}
 
 	for _, a := range assertions {

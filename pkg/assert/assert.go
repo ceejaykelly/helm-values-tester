@@ -19,6 +19,7 @@ const (
 	Equal    Operator = "=="
 	NotEqual Operator = "!="
 	Contains Operator = "contains"
+	All      Operator = "all"
 	Exists   Operator = "exists"
 
 	// Future operators to implement:
@@ -191,18 +192,10 @@ func Evaluate(values []byte, object_path string, operator string, expected any) 
 			}
 			return containsString(v, substr), nil
 		case []interface{}:
-			// Normalize expected through a YAML round-trip so that concrete map
-			// types like map[string]string become map[string]interface{}, which
-			// is what YAML unmarshalling always produces. This allows callers to
-			// pass typed Go structs and still get correct deep-equality results.
 			normalizedExpected, err := normalizeViaYAML(expected)
 			if err != nil {
 				return false, fmt.Errorf("failed to normalize expected value: %w", err)
 			}
-			// If expected is a map, use subset matching: the array item only needs
-			// to contain all keys from expected (extra keys are ignored). This
-			// allows assertions like {name: ENV_VAR} to match {name: ENV_VAR, value: "secret"}
-			// without needing to know the secret value.
 			if expectedMap, ok := normalizedExpected.(map[string]interface{}); ok {
 				for _, item := range v {
 					if itemMap, ok := item.(map[string]interface{}); ok {
@@ -213,7 +206,6 @@ func Evaluate(values []byte, object_path string, operator string, expected any) 
 				}
 				return false, nil
 			}
-			// For non-map expected values, fall back to exact equality.
 			for _, item := range v {
 				if reflect.DeepEqual(item, normalizedExpected) {
 					return true, nil
@@ -222,6 +214,33 @@ func Evaluate(values []byte, object_path string, operator string, expected any) 
 			return false, nil
 		default:
 			return false, fmt.Errorf("contains operator not supported for type %T", current)
+		}
+	case "all":
+		// For arrays: require every element to match the expected value/subset
+		switch v := current.(type) {
+		case []interface{}:
+			normalizedExpected, err := normalizeViaYAML(expected)
+			if err != nil {
+				return false, fmt.Errorf("failed to normalize expected value: %w", err)
+			}
+			if expectedMap, ok := normalizedExpected.(map[string]interface{}); ok {
+				for _, item := range v {
+					itemMap, ok := item.(map[string]interface{})
+					if !ok || !isSubset(expectedMap, itemMap) {
+						return false, nil
+					}
+				}
+				return true, nil
+			}
+			// For non-map expected values, require exact equality for all
+			for _, item := range v {
+				if !reflect.DeepEqual(item, normalizedExpected) {
+					return false, nil
+				}
+			}
+			return true, nil
+		default:
+			return false, fmt.Errorf("all operator not supported for type %T", current)
 		}
 	default:
 		return false, fmt.Errorf("unsupported operator: %s", operator)

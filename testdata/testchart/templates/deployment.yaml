@@ -21,3 +21,15 @@ spec:
           env:
             - name: ENV_VAR
               value: "value"
+          securityContext:
+            runAsNonRoot: true
+        - name: {{ .Values.app.name }}-1
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+          env:
+            - name: ENV_VAR
+              value: "value"
+          securityContext:
+            runAsNonRoot: true

@@ -32,3 +32,11 @@ check-env-var:
   operator: contains
   expected:
     name: ENV_VAR
+
+all-containers-run-as-non-root:
+  kind: Deployment
+  path: spec.template.spec.containers
+  operator: all
+  expected:
+    securityContext:
+      runAsNonRoot: true

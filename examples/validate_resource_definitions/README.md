@@ -2,7 +2,7 @@
 
 ## Overview
 
-This example demonstrates how to use ya as a Helm post-renderer to validate rendered Kubernetes resource definitions. By specifying assertions in YAML files, you can enforce structural and content requirements on your manifests to ensure that critical fields, labels, environment variables, and secrets are present and correctly configured before resources are applied. This approach enables automated, testable policy enforcement in CI/CD pipelines or local development.
+This example demonstrates how to use ya as a Helm post-renderer to validate rendered Kubernetes resource definitions. By specifying assertions in YAML files, you can enforce structural and content requirements on your manifests to ensure that critical fields, labels, environment variables, and secrets are present and correctly configured before resources are applied. This approach enables automated, testable policy enforcement in CI/CD pipelines or local development. This can be run as part of helm `template`, `upgrade` or `install` operations, and will prevent deployment if all assertions have not passed.
 
 ## Command - Happy Path
 

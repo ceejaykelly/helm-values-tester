@@ -134,3 +134,26 @@ func TestArrayContainsAssert(t *testing.T) {
 
 	executeAssertTestCases(t, tests)
 }
+
+func TestAllAssert(t *testing.T) {
+	tests := []AssertTestCase{
+		{
+			name:            "Test all elements match with All operator",
+			values:          []byte("foo: [{\"key\": \"value\", \"anotherKey\": \"anotherValue\"}, {\"key\": \"value\", \"anotherKey\": \"anotherValue\"}]\n"),
+			object_path:     "foo",
+			expected_input:  map[string]string{"key": "value"},
+			operator:        All,
+			expected_output: true,
+		},
+		{
+			name:            "Test not all elements match with All operator",
+			values:          []byte("foo: [{\"key\": \"value\"}, {\"key\": \"different value\"}]\n"),
+			object_path:     "foo",
+			expected_input:  map[string]string{"key": "value"},
+			operator:        All,
+			expected_output: false,
+		},
+	}
+
+	executeAssertTestCases(t, tests)
+}
