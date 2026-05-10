@@ -6,6 +6,7 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -21,6 +22,18 @@ const (
 // colorEnabled is true when stdout is a real terminal (not a pipe or file).
 // It is set once at startup in init().
 var colorEnabled bool
+
+// passFailWriter is the destination for PASS/FAIL output. It defaults to
+// os.Stdout but can be redirected to os.Stderr via UseStderrForPassFail().
+// This is necessary in post-renderer mode, where stdout carries YAML that
+// Helm reads — mixing diagnostic output into it would corrupt the stream.
+var passFailWriter io.Writer = os.Stdout
+
+// UseStderrForPassFail redirects PASS/FAIL output to stderr. Call this once
+// at startup when running as a Helm post-renderer.
+func UseStderrForPassFail() {
+	passFailWriter = os.Stderr
+}
 
 func init() {
 	fi, err := os.Stdout.Stat()
@@ -63,12 +76,14 @@ func Fatal(format string, args ...any) {
 	os.Exit(1)
 }
 
-// Pass writes a passing (green) assertion result to stdout.
+// Pass writes a passing (green) assertion result to passFailWriter (stdout by
+// default, stderr in post-renderer mode).
 func Pass(format string, args ...any) {
-	fmt.Fprintf(os.Stdout, "%s: %s\n", colorize(colorGreen, "PASS"), fmt.Sprintf(format, args...))
+	fmt.Fprintf(passFailWriter, "%s: %s\n", colorize(colorGreen, "PASS"), fmt.Sprintf(format, args...))
 }
 
-// Fail writes a failing (red) assertion result to stdout.
+// Fail writes a failing (red) assertion result to passFailWriter (stdout by
+// default, stderr in post-renderer mode).
 func Fail(format string, args ...any) {
-	fmt.Fprintf(os.Stdout, "%s: %s\n", colorize(colorRed, "FAIL"), fmt.Sprintf(format, args...))
+	fmt.Fprintf(passFailWriter, "%s: %s\n", colorize(colorRed, "FAIL"), fmt.Sprintf(format, args...))
 }

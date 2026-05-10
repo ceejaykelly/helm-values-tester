@@ -7,6 +7,7 @@ A CLI tool to merge Helm values files and assert conditions on rendered YAML out
 - Pipe multi-document YAML (e.g., from `helm template`) directly into `ya`
 - Assert values across multiple Kubernetes resources using inline or file-based assertions
 - Filter assertions by Kubernetes resource `kind` and `metadata.name`
+- Use as a **Helm post-renderer** to gate `helm install`/`upgrade` on assertions passing
 - Colored, leveled output (`PASS`/`FAIL`/`ERROR`) with correct exit codes for CI
 
 ## Installation
@@ -18,7 +19,7 @@ go build -o ya ./cmd/ya
 
 ## Usage
 
-`ya` has two subcommands: `merge` and `assert`.
+`ya` has three subcommands: `merge`, `assert`, and `post-render`.
 
 ### merge
 
@@ -122,6 +123,59 @@ Paths use dot notation with bracket indexing:
 - `spec.template.spec.containers[0].image`
 - `metadata.labels.app`
 
+### post-render
+
+`post-render` implements the [Helm post-renderer protocol](https://helm.sh/docs/topics/advanced/#post-rendering). It allows `ya` to gate a `helm install`, `helm upgrade`, or `helm template` on assertions passing — if any assertion fails, Helm aborts with an error.
+
+How it works:
+1. Helm renders chart templates and pipes the YAML to `ya`'s stdin.
+2. `ya` writes the YAML **unchanged** to stdout (Helm reads this back).
+3. All `PASS`/`FAIL`/`ERROR` output goes to **stderr** so it doesn't corrupt the YAML stream on stdout.
+4. `ya` exits non-zero if any assertion fails — Helm surfaces this as an error and aborts.
+
+```sh
+ya post-render [--assert <expr>] [--assert-file <file>]
+```
+
+Accepts the same `--assert` and `--assert-file` flags as the `assert` subcommand. Input always comes from stdin (as required by the Helm protocol) — file arguments are not supported.
+
+#### Helm `--post-renderer-args` convention
+
+Helm passes post-renderer arguments one word per `--post-renderer-args` flag. Each flag value must be a single token — flags and their values are passed separately:
+
+```sh
+# Each argument is its own --post-renderer-args flag
+helm template myrelease ./mychart \
+  --post-renderer ./ya \
+  --post-renderer-args post-render \
+  --post-renderer-args --assert-file \
+  --post-renderer-args ./asserts.yaml
+```
+
+To pass multiple assert files, repeat `--assert-file` and its value as separate pairs:
+
+```sh
+helm template myrelease ./mychart \
+  --post-renderer ./ya \
+  --post-renderer-args post-render \
+  --post-renderer-args --assert-file \
+  --post-renderer-args ./base-asserts.yaml \
+  --post-renderer-args --assert-file \
+  --post-renderer-args ./extra-asserts.yaml
+```
+
+To use an inline `--assert`:
+
+```sh
+helm template myrelease ./mychart \
+  --post-renderer ./ya \
+  --post-renderer-args post-render \
+  --post-renderer-args --assert \
+  --post-renderer-args "spec.replicas==3"
+```
+
+> **Note:** `ya` must be on your `PATH` (or referenced by path) for Helm to invoke it. Build with `go build -o ya ./cmd/ya`.
+
 ## Examples
 
 **Merge values files:**
@@ -140,6 +194,24 @@ helm template myrelease ./mychart -f values.yaml | ya assert \
 ```sh
 helm template myrelease ./mychart -f values.yaml \
   | ya assert --assert-file asserts.yaml
+```
+
+**Gate `helm template` on assertions (useful in CI):**
+```sh
+helm template myrelease ./mychart -f values.yaml \
+  --post-renderer ./ya \
+  --post-renderer-args post-render \
+  --post-renderer-args --assert-file \
+  --post-renderer-args ./asserts.yaml
+```
+
+**Gate `helm install` on assertions:**
+```sh
+helm install myrelease ./mychart -f values.yaml \
+  --post-renderer ./ya \
+  --post-renderer-args post-render \
+  --post-renderer-args --assert-file \
+  --post-renderer-args ./asserts.yaml
 ```
 
 **Assert on a specific resource kind and name:**

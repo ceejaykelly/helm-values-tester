@@ -1,8 +1,9 @@
 // Command ya is a CLI tool for merging Helm values files and asserting on
-// rendered YAML output. It provides two subcommands:
+// rendered YAML output. It provides three subcommands:
 //
 //	ya merge file1.yaml file2.yaml ...
 //	ya assert [--assert path==value] [--assert-file asserts.yaml] [file.yaml ...]
+//	ya post-render [--assert path==value] [--assert-file asserts.yaml]
 package main
 
 import (
@@ -31,8 +32,10 @@ func main() {
 		runMerge(os.Args[2:])
 	case "assert":
 		os.Exit(runAssert(os.Args[2:]))
+	case "post-render":
+		os.Exit(runPostRender(os.Args[2:]))
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown subcommand %q. Use 'merge' or 'assert'.\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "Unknown subcommand %q. Use 'merge', 'assert', or 'post-render'.\n", os.Args[1])
 		os.Exit(1)
 	}
 }
@@ -71,57 +74,23 @@ func runMerge(args []string) {
 // Input files (or stdin if omitted or "-") are parsed as multi-document YAML.
 // Each assertion is evaluated against the matching Kubernetes resource.
 func runAssert(args []string) int {
+	// Separate positional file args from --assert/--assert-file flags.
 	var filePaths []string
-	// assertMap holds named assertions. Using a map allows multiple --assert-file
-	// inputs to be merged: a key in a later file overrides the same key in an
-	// earlier file, enabling layered assertion suites (e.g. base + environment-specific).
-	assertMap := map[string]assert.AssertSpec{}
-	// inlineOrder tracks the insertion order of --assert flags so they run first
-	// and in the order they were specified.
-	var inlineKeys []string
-
-	i := 0
-	for i < len(args) {
-		arg := args[i]
-		switch {
-		case arg == "--assert" && i+1 < len(args):
-			spec, err := parseInlineAssert(args[i+1])
-			if err != nil {
-				logger.Error("invalid --assert %q: %v", args[i+1], err)
-				return 1
-			}
-			// Use the raw expression as the name for inline assertions.
-			key := args[i+1]
-			assertMap[key] = spec
-			inlineKeys = append(inlineKeys, key)
-			i += 2
-
-		case arg == "--assert-file" && i+1 < len(args):
-			data, err := os.ReadFile(args[i+1])
-			if err != nil {
-				logger.Error("failed to read assert file %q: %v", args[i+1], err)
-				return 1
-			}
-			// Assert files are maps of name → AssertSpec. Merging multiple files
-			// is as simple as overlaying one map on top of another.
-			var fileSpecs map[string]assert.AssertSpec
-			if err := yaml.Unmarshal(data, &fileSpecs); err != nil {
-				logger.Error("failed to parse assert file %q: %v", args[i+1], err)
-				return 1
-			}
-			for k, v := range fileSpecs {
-				assertMap[k] = v
-			}
-			i += 2
-
-		case strings.HasPrefix(arg, "--"):
-			logger.Error("unknown flag: %s", arg)
-			return 1
-
-		default:
-			filePaths = append(filePaths, arg)
+	var flagArgs []string
+	for i := 0; i < len(args); i++ {
+		if (args[i] == "--assert" || args[i] == "--assert-file") && i+1 < len(args) {
+			flagArgs = append(flagArgs, args[i], args[i+1])
 			i++
+		} else if strings.HasPrefix(args[i], "--") {
+			flagArgs = append(flagArgs, args[i])
+		} else {
+			filePaths = append(filePaths, args[i])
 		}
+	}
+
+	assertMap, inlineKeys, ok := parseAssertFlags(flagArgs)
+	if !ok {
+		return 1
 	}
 
 	// Read YAML input from files or stdin.
@@ -169,13 +138,130 @@ func runAssert(args []string) int {
 		return 0
 	}
 
-	// Build an ordered list of assertion names. Inline --assert flags come first
-	// (in the order specified), then file-based assertions in sorted order.
-	fileKeys := make([]string, 0, len(assertMap))
+	return evaluateAssertions(assertMap, inlineKeys, docs)
+}
+
+// runPostRender implements the Helm post-renderer protocol.
+//
+// Helm post-renderers work by:
+//  1. Helm renders chart templates and sends the YAML to the post-renderer's stdin.
+//  2. The post-renderer writes (possibly modified) YAML to stdout.
+//  3. Helm reads that stdout and applies it to the cluster.
+//  4. If the post-renderer exits non-zero, Helm aborts — resources are NOT applied.
+//
+// ya acts as a pass-through post-renderer: it writes the original YAML unchanged
+// to stdout (no modifications) and uses the exit code to gate the deploy. All
+// diagnostic output (PASS/FAIL/ERROR) goes to stderr so it doesn't corrupt the
+// YAML stream on stdout.
+//
+// Usage with helm:
+//
+//	helm install myrelease ./mychart \
+//	  --post-renderer ya \
+//	  --post-renderer-args post-render \
+//	  --post-renderer-args --assert-file \
+//	  --post-renderer-args asserts.yaml
+func runPostRender(args []string) int {
+	// Redirect PASS/FAIL output to stderr so stdout stays clean for Helm.
+	logger.UseStderrForPassFail()
+
+	// Parse --assert and --assert-file flags (identical logic to runAssert).
+	assertMap, inlineKeys, ok := parseAssertFlags(args)
+	if !ok {
+		return 1
+	}
+
+	// Buffer all of stdin — we need to both run assertions on it and echo it
+	// back to stdout for Helm to use.
+	rawInput, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		logger.Error("failed to read stdin: %v", err)
+		return 1
+	}
+
+	// Always write the original YAML to stdout. Helm reads this regardless of
+	// the exit code; a non-zero exit causes Helm to abort the apply.
+	if _, err := os.Stdout.Write(rawInput); err != nil {
+		logger.Error("failed to write YAML to stdout: %v", err)
+		return 1
+	}
+
+	if len(assertMap) == 0 {
+		// No assertions configured — pass through and exit 0.
+		return 0
+	}
+
+	// Parse and evaluate assertions, same as runAssert.
+	docs, err := document.Split(rawInput)
+	if err != nil {
+		logger.Error("failed to parse YAML input: %v", err)
+		return 1
+	}
+
+	return evaluateAssertions(assertMap, inlineKeys, docs)
+}
+
+// parseAssertFlags extracts --assert and --assert-file flags from args.
+// It returns the merged assertion map, the ordered inline keys, and a success bool.
+// Any positional arguments (non-flag args) are silently ignored; post-render
+// always reads from stdin.
+func parseAssertFlags(args []string) (map[string]assert.AssertSpec, []string, bool) {
+	assertMap := map[string]assert.AssertSpec{}
+	var inlineKeys []string
+
+	i := 0
+	for i < len(args) {
+		arg := args[i]
+		switch {
+		case arg == "--assert" && i+1 < len(args):
+			spec, err := parseInlineAssert(args[i+1])
+			if err != nil {
+				logger.Error("invalid --assert %q: %v", args[i+1], err)
+				return nil, nil, false
+			}
+			key := args[i+1]
+			assertMap[key] = spec
+			inlineKeys = append(inlineKeys, key)
+			i += 2
+
+		case arg == "--assert-file" && i+1 < len(args):
+			data, err := os.ReadFile(args[i+1])
+			if err != nil {
+				logger.Error("failed to read assert file %q: %v", args[i+1], err)
+				return nil, nil, false
+			}
+			var fileSpecs map[string]assert.AssertSpec
+			if err := yaml.Unmarshal(data, &fileSpecs); err != nil {
+				logger.Error("failed to parse assert file %q: %v", args[i+1], err)
+				return nil, nil, false
+			}
+			for k, v := range fileSpecs {
+				assertMap[k] = v
+			}
+			i += 2
+
+		case strings.HasPrefix(arg, "--"):
+			logger.Error("unknown flag: %s", arg)
+			return nil, nil, false
+
+		default:
+			// Positional args (e.g. input files for assert mode) — skip in post-render.
+			i++
+		}
+	}
+	return assertMap, inlineKeys, true
+}
+
+// evaluateAssertions runs all assertions in assertMap against docs and returns
+// an exit code (0 = all pass, 1 = any fail). It is shared between runAssert
+// and runPostRender.
+func evaluateAssertions(assertMap map[string]assert.AssertSpec, inlineKeys []string, docs []map[string]interface{}) int {
+	// Order: inline --assert flags first (in given order), then file-based keys sorted.
 	inlineSet := make(map[string]bool, len(inlineKeys))
 	for _, k := range inlineKeys {
 		inlineSet[k] = true
 	}
+	fileKeys := make([]string, 0, len(assertMap))
 	for k := range assertMap {
 		if !inlineSet[k] {
 			fileKeys = append(fileKeys, k)
@@ -184,11 +270,9 @@ func runAssert(args []string) int {
 	sort.Strings(fileKeys)
 	orderedKeys := append(inlineKeys, fileKeys...)
 
-	// Evaluate each assertion. Track overall pass/fail.
 	exitCode := 0
 	for _, name := range orderedKeys {
 		a := assertMap[name]
-		// Find resources that match the assertion's kind/name selector.
 		matched := document.Match(docs, a.Kind, a.Name)
 		if len(matched) == 0 {
 			logger.Fail("%s [no match] (no resource matched selector kind=%q name=%q)",
@@ -200,7 +284,6 @@ func runAssert(args []string) int {
 		for _, doc := range matched {
 			resource := fmt.Sprintf("[%s/%s]", document.Kind(doc), document.Name(doc))
 
-			// Marshal the document back to YAML bytes so Evaluate can unmarshal it.
 			docBytes, err := yaml.Marshal(doc)
 			if err != nil {
 				logger.Error("%s %s failed to re-marshal document: %v", name, resource, err)
@@ -220,11 +303,10 @@ func runAssert(args []string) int {
 			}
 		}
 	}
-
 	return exitCode
 }
 
-// parseInlineAssert parses a single inline assertion of the form:
+// parseInlineAssert parses a single inline assertion of the form://
 //
 //	path<op>value
 //
