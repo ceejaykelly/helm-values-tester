@@ -146,7 +146,7 @@ Helm passes post-renderer arguments one word per `--post-renderer-args` flag. Ea
 ```sh
 # Each argument is its own --post-renderer-args flag
 helm template myrelease ./mychart \
-  --post-renderer ./ya \
+  --post-renderer ya \
   --post-renderer-args post-render \
   --post-renderer-args --assert-file \
   --post-renderer-args ./asserts.yaml
@@ -156,7 +156,7 @@ To pass multiple assert files, repeat `--assert-file` and its value as separate 
 
 ```sh
 helm template myrelease ./mychart \
-  --post-renderer ./ya \
+  --post-renderer ya \
   --post-renderer-args post-render \
   --post-renderer-args --assert-file \
   --post-renderer-args ./base-asserts.yaml \
@@ -168,7 +168,7 @@ To use an inline `--assert`:
 
 ```sh
 helm template myrelease ./mychart \
-  --post-renderer ./ya \
+  --post-renderer ya \
   --post-renderer-args post-render \
   --post-renderer-args --assert \
   --post-renderer-args "spec.replicas==3"
@@ -199,7 +199,7 @@ helm template myrelease ./mychart -f values.yaml \
 **Gate `helm template` on assertions (useful in CI):**
 ```sh
 helm template myrelease ./mychart -f values.yaml \
-  --post-renderer ./ya \
+  --post-renderer ya \
   --post-renderer-args post-render \
   --post-renderer-args --assert-file \
   --post-renderer-args ./asserts.yaml
@@ -208,7 +208,7 @@ helm template myrelease ./mychart -f values.yaml \
 **Gate `helm install` on assertions:**
 ```sh
 helm install myrelease ./mychart -f values.yaml \
-  --post-renderer ./ya \
+  --post-renderer ya \
   --post-renderer-args post-render \
   --post-renderer-args --assert-file \
   --post-renderer-args ./asserts.yaml
