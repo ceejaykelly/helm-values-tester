@@ -1,0 +1,5 @@
+replicaCount: 3
+image:
+  tag: v1.2.3
+secret:
+  password: prod-secret

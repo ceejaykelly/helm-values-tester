@@ -1,0 +1,6 @@
+fail-check-image-repository:
+  kind: Deployment
+  name: test-value-override
+  path: spec.template.spec.containers[0].image
+  operator: contains
+  expected: non-existent-repo

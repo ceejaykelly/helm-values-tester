@@ -1,0 +1,10 @@
+app:
+  name: myapp
+image:
+  repository: myrepo/myapp
+  tag: latest
+  pullPolicy: IfNotPresent
+replicaCount: 1
+secret:
+  username: admin
+  password: default-pass

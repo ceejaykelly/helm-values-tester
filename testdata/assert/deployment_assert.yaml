@@ -24,3 +24,11 @@ check-image-contains-repo:
   path: spec.template.spec.containers[0].image
   operator: contains
   expected: test-repo
+
+check-env-var:
+  kind: Deployment
+  name: test-value-override
+  path: spec.template.spec.containers[0].env
+  operator: contains
+  expected:
+    name: ENV_VAR

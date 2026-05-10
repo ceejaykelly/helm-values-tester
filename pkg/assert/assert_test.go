@@ -27,7 +27,7 @@ func executeAssertTestCases(t *testing.T, tests []AssertTestCase) {
 	}
 }
 
-func TestAssert(t *testing.T) {
+func TestEqualAssert(t *testing.T) {
 	tests := []AssertTestCase{
 		{
 			name:            "Test happy path with Equal operator",
@@ -106,6 +106,29 @@ func TestContainsAssert(t *testing.T) {
 			expected_input:  "qux",
 			operator:        Contains,
 			expected_output: false,
+		},
+	}
+
+	executeAssertTestCases(t, tests)
+}
+
+func TestArrayContainsAssert(t *testing.T) {
+	tests := []AssertTestCase{
+		{
+			name:            "Test array contains with Contains operator",
+			values:          []byte("foo: [\"bar\", \"baz\"]\n"),
+			object_path:     "foo",
+			expected_input:  "bar",
+			operator:        Contains,
+			expected_output: true,
+		},
+		{
+			name:            "Test array contains map with Contains operator",
+			values:          []byte("foo: [{\"key\": \"value\", \"anotherKey\": \"anotherValue\"}, {\"key\": \"another value\"}]\n"),
+			object_path:     "foo",
+			expected_input:  map[string]string{"key": "value"},
+			operator:        Contains,
+			expected_output: true,
 		},
 	}
 

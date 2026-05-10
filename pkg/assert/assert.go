@@ -191,8 +191,31 @@ func Evaluate(values []byte, object_path string, operator string, expected any) 
 			}
 			return containsString(v, substr), nil
 		case []interface{}:
+			// Normalize expected through a YAML round-trip so that concrete map
+			// types like map[string]string become map[string]interface{}, which
+			// is what YAML unmarshalling always produces. This allows callers to
+			// pass typed Go structs and still get correct deep-equality results.
+			normalizedExpected, err := normalizeViaYAML(expected)
+			if err != nil {
+				return false, fmt.Errorf("failed to normalize expected value: %w", err)
+			}
+			// If expected is a map, use subset matching: the array item only needs
+			// to contain all keys from expected (extra keys are ignored). This
+			// allows assertions like {name: ENV_VAR} to match {name: ENV_VAR, value: "secret"}
+			// without needing to know the secret value.
+			if expectedMap, ok := normalizedExpected.(map[string]interface{}); ok {
+				for _, item := range v {
+					if itemMap, ok := item.(map[string]interface{}); ok {
+						if isSubset(expectedMap, itemMap) {
+							return true, nil
+						}
+					}
+				}
+				return false, nil
+			}
+			// For non-map expected values, fall back to exact equality.
 			for _, item := range v {
-				if reflect.DeepEqual(item, expected) {
+				if reflect.DeepEqual(item, normalizedExpected) {
 					return true, nil
 				}
 			}
@@ -209,4 +232,36 @@ func Evaluate(values []byte, object_path string, operator string, expected any) 
 // It delegates directly to strings.Contains, which uses an efficient algorithm.
 func containsString(s, substr string) bool {
 	return strings.Contains(s, substr)
+}
+
+// normalizeViaYAML converts v to the same type representation that YAML
+// unmarshalling produces (e.g. map[string]interface{} instead of map[string]string).
+// This allows typed Go values to be compared with unmarshalled YAML values.
+func normalizeViaYAML(v any) (any, error) {
+	b, err := yaml.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var out any
+	if err := yaml.Unmarshal(b, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// isSubset reports whether every key in expected exists in actual with a deeply
+// equal value. Keys present in actual but absent from expected are ignored.
+// This enables partial map matching, e.g. asserting {name: FOO} matches
+// {name: FOO, value: "secret"} without knowing the secret.
+func isSubset(expected, actual map[string]interface{}) bool {
+	for k, expectedVal := range expected {
+		actualVal, ok := actual[k]
+		if !ok {
+			return false
+		}
+		if !reflect.DeepEqual(actualVal, expectedVal) {
+			return false
+		}
+	}
+	return true
 }
