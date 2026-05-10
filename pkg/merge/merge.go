@@ -77,9 +77,12 @@ func Values(files ...[]byte) ([]byte, error) {
 		currentMerged = next
 	}
 
-	// Check for null (nil) values in the final merged result
+	// Check for null (nil) values in the final merged result.
+	// Null values in Helm charts indicate a misconfiguration — a required field
+	// was not overridden — so we surface this as an error rather than silently
+	// producing invalid YAML.
 	if path, found := findNullPath(currentMerged, ""); found {
-		return []byte(fmt.Sprintf("A null value was detected at path: %s\n", path)), nil
+		return nil, fmt.Errorf("null value at path: %s", path)
 	}
 
 	return yaml.Marshal(currentMerged)

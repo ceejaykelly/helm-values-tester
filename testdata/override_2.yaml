@@ -1,2 +1,6 @@
 include:
   - override_1.yaml
+
+secret:
+  username: test-user
+  password: test-pass

@@ -46,7 +46,7 @@ func TestValues(t *testing.T) {
 			name:      "null value detected",
 			base:      "foo: bar\n",
 			overrides: [][]byte{[]byte("test:\n")},
-			expected:  "A null value was detected at path: test\n",
+			expected:  "null value at path: test",
 		},
 	}
 

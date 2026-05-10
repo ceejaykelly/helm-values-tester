@@ -1,6 +1,11 @@
-module github.com/ceejaykelly/helm-values-tester
+module github.com/ceejaykelly/yaml-assertions
 
 go 1.25.0
+
+require (
+	helm.sh/helm/v3 v3.20.2
+	sigs.k8s.io/yaml v1.6.0
+)
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
@@ -8,6 +13,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -19,7 +25,6 @@ require (
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	helm.sh/helm/v3 v3.20.2 // indirect
 	k8s.io/api v0.35.1 // indirect
 	k8s.io/apiextensions-apiserver v0.35.1 // indirect
 	k8s.io/apimachinery v0.35.1 // indirect
@@ -30,5 +35,4 @@ require (
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
-	sigs.k8s.io/yaml v1.6.0 // indirect
 )

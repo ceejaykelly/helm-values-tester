@@ -1,0 +1,26 @@
+check-app-label:
+  kind: Deployment
+  name: test-value-override
+  path: spec.template.metadata.labels.app
+  operator: ==
+  expected: test-value-override
+
+check-image-pull-policy:
+  kind: Deployment
+  name: test-value-override
+  path: spec.template.spec.containers[0].imagePullPolicy
+  operator: ==
+  expected: Always
+
+check-image-exists:
+  kind: Deployment
+  name: test-value-override
+  path: spec.template.spec.containers[0].image
+  operator: exists
+
+check-image-contains-repo:
+  kind: Deployment
+  name: test-value-override
+  path: spec.template.spec.containers[0].image
+  operator: contains
+  expected: test-repo
